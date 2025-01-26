@@ -7,10 +7,10 @@ library(tidyverse)
 library(USDAMARS)
 
 #Set API Key
-MARS_API_Key("7XWk8PBs9+OLcbfPji2p2iUhoyoONlYP")
+MARS_API_Key()
 
 #Import Time Matrix
-Time_Matrix <- read.csv("C:/Users/djset/OneDrive/Desktop/Independent Projects/Time Matrixing and Aggregating Market News Data from Biweekly to Monthly/Data Out/International_Time_Matrix_Market_News.csv")
+Time_Matrix <- read.csv()
 
 Dir <- MARS_Table_Directory()
 #Get Table
