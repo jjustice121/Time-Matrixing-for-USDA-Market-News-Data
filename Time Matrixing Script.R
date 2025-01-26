@@ -6,7 +6,7 @@ library(tidyverse)
 library(USDAMARS)
 
 #Set API Key
-MARS_API_Key("7XWk8PBs9+OLcbfPji2p2iUhoyoONlYP")
+MARS_API_Key()
 
 Dir <- MARS_Table_Directory()
 #Get Table
@@ -65,5 +65,5 @@ International_Time_Matrix_MMN <- Days_df %>% left_join(Butter, by = c("ID","repo
 
 
 #export dataframe
-write.csv(International_Time_Matrix_MMN,"C:/Users/djset/OneDrive/Desktop/Independent Projects/Time Matrixing and Aggregating Market News Data from Biweekly to Monthly/Data Out/International_Time_Matrix_Market_News.csv", row.names = FALSE)
+write.csv(International_Time_Matrix_MMN, row.names = FALSE)
 
