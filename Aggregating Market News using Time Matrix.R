@@ -7,10 +7,10 @@ library(tidyverse)
 library(USDAMARS)
 
 #set working directory
-setwd("C:/Users/jessie.justice/OneDrive - USDA/Desktop/Data Analysis Projects/EAB Data Management/Test Scripts and Programs/Test Outputs")
+setwd()
 
 #Set API Key
-MARS_API_Key("d8qcrgndThTeo/iTpu5AJF8rqbe+AT7mImzqT4gWe2U=")
+MARS_API_Key()
 
 #write function to convert $/MT to $/LB
 Conversion_to_Dollars_Per_Lb <- function(i){
@@ -89,4 +89,4 @@ lapply(Report_List,Aggregate_Biweekly_to_Monthly)
 sheets <- list("Butter - Oceania" = `Butter - Oceania`, "Cheese - Oceania" = `Cheese - Oceania`,"Skim Milk Powder - Oceania" = `Skim Milk Powder - Oceania`,"Dry Whey - Europe" = `Dry Whey - Europe`)
 
 #Write Sheets to Excel File
-write.xlsx(sheets,"C:/Users/jessie.justice/OneDrive - USDA/Desktop/Data Analysis Projects/EAB Data Management/Test Scripts and Programs/Test Outputs/International_Monthly_Market_News_Data.xlsx")
+write.xlsx(sheets,)
