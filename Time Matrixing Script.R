@@ -7,7 +7,7 @@ library(USDAMARS)
 library(openxlsx)
 
 #Set API Key
-MARS_API_Key("d8qcrgndThTeo/iTpu5AJF8rqbe+AT7mImzqT4gWe2U=")
+MARS_API_Key()
 
 #get MARS report directory
 Dir <- MARS_Table_Directory()
@@ -112,5 +112,5 @@ lapply(Report_List,Time_Matrixing)
 sheets <- list("Butter - Oceania" = `Butter - Oceania`, "Cheese - Oceania" = `Cheese - Oceania`,"Skim Milk Powder - Oceania" = `Skim Milk Powder - Oceania`,"Dry Whey - Europe" = `Dry Whey - Europe`)
 
 #Write Sheets to Excel File
-write.xlsx(sheets,"C:/Users/jessie.justice/OneDrive - USDA/Desktop/Data Analysis Projects/EAB Data Management/Test Scripts and Programs/Test Outputs/International_Market_News_Time_Matrix.xlsx")
+write.xlsx(sheets,)
 
