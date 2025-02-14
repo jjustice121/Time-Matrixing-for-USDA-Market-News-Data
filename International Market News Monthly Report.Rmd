@@ -24,7 +24,7 @@ library(htmltools)
 ```{r,echo=FALSE, include=FALSE}
 #Pull Data from API and Generate Time Matrices
 #Set API Key
-MARS_API_Key("d8qcrgndThTeo/iTpu5AJF8rqbe+AT7mImzqT4gWe2U=")
+MARS_API_Key()
 
 #Write function for create time matrix
 
