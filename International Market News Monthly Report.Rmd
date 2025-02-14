@@ -1,0 +1,329 @@
+---
+title: "Monthly Dairy Prices"
+output:
+  html_document: default
+  pdf_document: default
+  always_allow_html: yes
+---
+```{css, echo=FALSE}
+h1 {
+  text-align: center;
+}
+```
+
+```{r setup, include=FALSE,echo=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, echo = FALSE) 
+library(tidyverse)
+library(USDAMARS)
+library(httr)
+library(jsonlite)
+library(plotly)
+library(htmltools)
+```
+
+```{r,echo=FALSE, include=FALSE}
+#Pull Data from API and Generate Time Matrices
+#Set API Key
+MARS_API_Key("d8qcrgndThTeo/iTpu5AJF8rqbe+AT7mImzqT4gWe2U=")
+
+#Write function for create time matrix
+
+Time_Matrixing <- function(slug_id){
+  
+  df <- MARS_Table_Pull(slug_id)
+  
+  title <- df$report_title[1]
+
+  df <- df %>% select(c("report_begin_date","report_end_date"))
+  
+  df <- df %>% filter(!(report_begin_date == report_end_date))
+
+  #get days in range
+
+  #add unique ID
+  df$ID <- as.numeric(factor(df$report_begin_date, levels = unique(df$report_begin_date)))
+
+  #functions to get day count in each respective month within range for report
+
+  f1 <- function(d_first,d_last){
+    d_first <- mdy(d_first)
+    d_last <- mdy(d_last)
+  
+  
+    D <- seq.Date(d_first, d_last, 1) # generate all days in [d_first,d_last]
+  
+    D <- D[!weekdays(D) %in% c("Saturday","Sunday")]
+    
+    if(length(D) < 10){
+      
+      D <- seq.Date(d_first,d_last + 4,1)
+      
+    }else{
+      
+      D <- seq.Date(d_first,d_last,1)
+    }
+    
+    D <- D[!weekdays(as.Date(D)) %in% c("Saturday","Sunday")]
+    
+    M <- unique(format(D, "%m")) # all months in [d_first,d_lst]
+  
+  
+    f2 <- function(x) length(which(format(D, "%m") == x)) # returns number of days in month x
+  
+    res <- vapply(M,f2,numeric(1))
+  
+    return(cbind(unique(format(D, "%Y-%m")),res))
+  }
+
+  f3 <- function(k) f1(df$report_begin_date[k],df$report_end_date[k])
+
+  f4 <- function(k) cbind(df$ID[k],df$report_begin_date[k], f3(k))
+
+
+  Days_output <- sapply(1:nrow(df), f4)
+
+  Days_df <- as.data.frame(do.call(rbind, Days_output))
+
+  colnames(Days_df) <- c("ID","report_begin_date","Month-Year","Number_of_Business_Days") 
+
+  Days_df$Month <- substr(Days_df$`Month-Year`,6,7)
+
+  Days_df <- Days_df %>% pivot_wider(names_from = Month,values_from = Number_of_Business_Days) %>% mutate(ID = as.numeric(ID))
+
+  Days_df <- Days_df %>% select(c("ID","report_begin_date","Month-Year","01","02","03","04","05","06","07","08","09","10","11","12")) 
+
+  colnames(Days_df)[4:15] <- month.name
+
+  #merge Days_df into the original Butter df on ID and report begin date
+
+  Matrix <- Days_df %>% left_join(df, by = c("ID","report_begin_date")) %>% select(-c("report_end_date"))
+  
+  #vector of month names
+  Months <- c("January","February","March","April","May","June","July","August","September","October","November","December")
+  
+  #transform columns
+  Matrix[,Months] <- lapply(Matrix[,Months], function(x) substr(x,1,2))
+  
+  #transform to numeric
+  Matrix[,Months] <- lapply(Matrix[,Months], function(x) as.numeric(x))
+  
+  assign(paste0(title,"_Matrix"),Matrix, envir = .GlobalEnv)
+  
+}
+
+#Iterate Over List of Reports
+
+#European Whey, Oceania SMP, Oceania Cheese, Oceania Butter
+Report_List <- c(1034,1038,1082,1099)
+
+lapply(Report_List,Time_Matrixing)
+```
+
+```{r,echo=FALSE, include=FALSE}
+#Transform Biweekly Data to Monthly Data
+#write function to convert $/MT to $/LB
+Conversion_to_Dollars_Per_Lb <- function(i){
+  
+  DollarsPerLb <- i * 0.00045359237
+}
+
+#write function to iterate over all International DMN Reports
+Aggregate_Biweekly_to_Monthly <- function(slug_id){
+  
+  #Get Table
+  df <- MARS_Table_Pull(slug_id)
+  
+  #import time matrix
+  time_matrix <- get(paste0(df$report_title[1],"_Matrix"))
+
+  df <- df %>% select(c("report_begin_date","report_title","price_Unit","price_min","price_max")) %>% mutate(price_midpoint = (price_min + price_max)/2)
+
+  #add unique ID
+  df$ID <- as.numeric(factor(df$report_begin_date, levels = unique(df$report_begin_date)))
+  
+  #drop begin date for merge
+  df <- df %>% select(-c("report_begin_date"))
+  
+  #Merge Time Matrix and Data
+  df_Matrix <- df %>% left_join(time_matrix, by =c("ID"))
+
+  #list of columns to transform
+  Months <- c("January","February","March","April","May","June","July","August","September","October","November","December")
+
+  #get rowsums
+  df_Matrix$Days_Total <- rowSums(df_Matrix[,Months], na.rm = TRUE)
+
+  #get total business days by month-year combination
+  df_Matrix <- df_Matrix %>% group_by(`Month-Year`) %>% mutate(Days_Total_Month = sum(Days_Total)) %>% ungroup()
+
+  #multiply price columns by Days_total
+  df_Matrix <- df_Matrix %>% mutate(price_min_prod_days = price_min * Days_Total, price_max_prod_days = price_max * Days_Total, price_midpoint_prod_days = price_midpoint * Days_Total)
+
+  #get monthly aggregate products
+  df_Matrix <- df_Matrix %>% group_by(`Month-Year`) %>% mutate(price_min_prod_days_agg = sum(price_min_prod_days), price_max_prod_days_agg = sum(price_max_prod_days), price_midpoint_prod_days_agg = sum(price_midpoint_prod_days)) %>% ungroup()
+
+  #divide by total number of business days in month
+  df_Matrix <- df_Matrix %>% mutate(price_min_monthly = price_min_prod_days_agg/Days_Total_Month, price_max_monthly = price_max_prod_days_agg/Days_Total_Month, price_midpoint_monthly = price_midpoint_prod_days_agg/Days_Total_Month)
+
+  #convert to dollar per lb
+
+  #function to convert from $/mt to $/lb
+  df_Matrix <- df_Matrix %>% mutate_at(c("price_min_monthly","price_max_monthly","price_midpoint_monthly"),Conversion_to_Dollars_Per_Lb)
+
+  #drop columns we don't need
+  df_Matrix <- df_Matrix %>% select(-c(price_Unit,price_min_prod_days,price_max_prod_days,price_midpoint_prod_days,price_min_prod_days_agg,price_max_prod_days_agg,price_midpoint_prod_days_agg))
+
+  #aggregate dataframe to get a single value for each month-year combination
+  df_Matrix <- df_Matrix %>% select(-c(Months,Days_Total, price_min,price_max,price_midpoint,ID,report_begin_date)) %>% distinct()
+  
+  title <- gsub(" ","",df$report_title[1])
+
+  assign(title,df_Matrix, envir = .GlobalEnv)
+  
+  
+}
+
+#test function
+#Aggregate_Biweekly_to_Monthly(1034)
+
+#Iterate Over Report List
+lapply(Report_List,Aggregate_Biweekly_to_Monthly)
+```
+<center>
+**International Dairy Market News Plots**
+</center>
+
+```{r, echo=FALSE}
+monthly_line_plots <- function(df){
+#Generate Plots for 4 Major Commodities in ICEC
+  df <- get(df)
+  
+  df <- df %>% filter(df$`Month-Year` >= "2010-01")
+  
+  fig <- plot_ly(df, x = ym(df$`Month-Year`), y = df$price_midpoint_monthly,name = "Midpoint", type = 'scatter', mode = 'lines',line = list(color = "mediumblue", width = 4))
+
+  fig <- fig %>% add_trace(y = df$price_max_monthly,name = "High", line = list(color = "lightblue",dash ='dash', width = 3))
+
+  fig <- fig %>% add_trace(y = df$price_min_monthly,name = "Low", line = list(color = "slategray", dash = 'dash', width = 3))
+
+  fig <- fig %>% layout(title = paste0(df$report_title[1]," ","Monthly Average Prices"),
+                      xaxis = list(title = "Year"),
+                      yaxis = list (title = "Price ($/lb)"))
+
+  fig
+
+}
+
+dataframes <- c("Butter-Oceania","SkimMilkPowder-Oceania","Cheese-Oceania","DryWhey-Europe")
+
+tagList(lapply(dataframes,monthly_line_plots))
+```
+
+```{r, echo=FALSE, include=FALSE}
+#NDPSR Data Pull Function
+NDPSR_API_PULL <- function(slugid,section){
+  
+  section <- gsub(" ","%20",section)
+  
+  URL <- GET(paste0("https://mpr.datamart.ams.usda.gov/services/v1.1/reports/",slugid,"/",section))
+  
+  Data <- fromJSON(rawToChar(URL$content))
+  
+  df <- as.data.frame(Data$results)
+  
+  df <- df %>% select(-c("week_ending_date","created_date","report_title","slug_name","narrative","slug_id","office_name","office_code","office_city","office_state","market_location_city","market_location_name","market_location_state","market_type","market_type_category","published_date"))
+  
+  assign(gsub("%20"," ",section),df, envir=.GlobalEnv)
+  
+  return(df)
+  
+}
+
+#Get List of Reports 
+
+#Commodity_List <- c("Final Butter Prices and Sales","Final 40 Pound Block Cheddar Cheese Prices and Sales", "Final #500 Pound Barrel Cheddar Cheese Prices, Sales, and Moisture Content", "Final Dry Whey Prices and Sales", "Final #Nonfat Dry Milk Prices and Sales")
+
+#get data
+#lapply(Commodity_List,NDPSR_API_PULL, slugid = "2993")
+
+#get detailed monthly data
+Announcement_Class_Component_Monthly <- NDPSR_API_PULL("2991","Detail")
+
+Announcement_Class_Component_Monthly <- Announcement_Class_Component_Monthly %>% 
+  
+  select(c("report_year","report_month","butter_monthly_avg_Price","nfdm_monthly_avg_Price","cheese_monthly_avg_Price","whey_monthly_avg_Price"))
+
+columns <- colnames(Announcement_Class_Component_Monthly)[3:6]
+
+Announcement_Class_Component_Monthly$report_month <- recode(Announcement_Class_Component_Monthly$report_month,"Jan"="01" ,"Feb"="02" ,"Mar"="03" ,"Apr"="04" ,"May"="05" ,"Jun"="06","Jul"="07" ,"Aug"="08" ,"Sep"= "09","Oct"= "10" ,"Nov"= "11" ,"Dec"= "12")
+
+Announcement_Class_Component_Monthly <- Announcement_Class_Component_Monthly %>% mutate("Month-Year" = paste0(report_year,"-",report_month))
+
+Announcement_Class_Component_Monthly <- Announcement_Class_Component_Monthly %>% mutate_at(columns,as.numeric)
+
+```
+
+<center>
+**Domestic (NDPSR) Plots**
+</center>
+
+```{r}
+monthly_line_plots_domestic <- function(column){
+#Generate Plots for 4 Major Commodities in ICEC
+  df <- Announcement_Class_Component_Monthly %>% select(`Month-Year`,column)
+  
+  title <- str_to_title(strsplit(column,"_")[[1]][1])
+  
+  fig <- plot_ly(df, x = ym(df$`Month-Year`), y = df[,2],name = "Average", type = 'scatter', mode = 'lines',line = list(color = "red", width = 4))
+
+  fig <- fig %>% layout(title = paste0(title," ","Monthly Average Prices"),
+                      xaxis = list(title = "Year"),
+                      yaxis = list (title = "Price ($/lb)"))
+
+  fig
+
+}
+
+tagList(lapply(columns,monthly_line_plots_domestic))
+```
+
+```{r}
+monthly_line_plots <- function(df,column){
+#Generate Plots for 4 Major Commodities in ICEC
+  df <- get(df)
+  
+  df <- df %>% rename(Date = `Month-Year`)
+
+  df <- df %>% filter(df$Date >= "2010-01")
+
+  report <- str_to_title(strsplit(column,"_")[[1]][1])
+
+  df2 <- Announcement_Class_Component_Monthly %>% select(Date = `Month-Year`,column) %>% drop_na()
+
+  df3 <- df %>% left_join(df2, by = "Date")
+
+  df3 <- df3 %>% drop_na()
+
+  column <- colnames(df3[,7])
+
+  fig <- plot_ly(df3,x = ym(df3$Date), y = df3$price_midpoint_monthly, name = "International", type = 'scatter', mode = 'lines',line = list(color = "mediumblue", width = 4))
+
+  fig <- fig %>% add_trace(y = df2[,column],name = "Domestic", line = list(color = "red", width = 4))
+
+  fig <- fig %>% layout(title = paste0(report," ","Monthly Average Prices"),
+                      xaxis = list(title = "Year"),
+                      yaxis = list (title = "Price ($/lb)"))
+
+  tagList(fig)
+
+}
+
+dataframes <- c("Butter-Oceania","SkimMilkPowder-Oceania","Cheese-Oceania","DryWhey-Europe")
+
+columns <- colnames(Announcement_Class_Component_Monthly)[3:6]
+
+graphs <- mapply(monthly_line_plots, df = dataframes,column = columns)
+
+tagList(graphs)
+```
+
